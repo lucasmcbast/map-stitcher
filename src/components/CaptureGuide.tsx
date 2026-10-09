@@ -1,7 +1,7 @@
 const TIPS: [string, string][] = [
   ['Zoomstufe nicht verändern', 'Alle Screenshots müssen exakt denselben Maßstab haben.'],
   ['Browserfenster nicht verändern', 'Gleiche Fenstergröße = gleiche Screenshot-Größe.'],
-  ['25–40 % Überlappung', 'Jeder Screenshot sollte ein gutes Stück seiner Nachbarn zeigen.'],
+  ['25–40 % Überlappung', 'Ideal 25–40 %, ab ca. 10 % funktioniert es meist auch noch.'],
   ['Karte nur verschieben', 'Ziehen oder Pfeiltasten – nicht zoomen.'],
   ['Systematisch in Reihen', 'Links → rechts, eine Reihe nach unten, wieder links → rechts.'],
   ['Keine Rotation', 'Karte genordet lassen, nicht drehen oder kippen (3D aus).'],

@@ -50,7 +50,8 @@ Die **Algorithmus-Tests** (`tests/stitching.test.ts`) erzeugen programmatisch ei
 | --- | --- |
 | **4 × 5 Raster, 30 % Überlappung, zufällige Reihenfolge** (Hauptkriterium) | alle 20 platziert, Positionsfehler ≤ 1 px, Raster 4 × 5 mit korrekter Zeile/Spalte je Bild, gerendertes Mosaik **100 % pixelidentisch** mit der Originalkarte |
 | horizontale Reihe (1 × 6), vertikale Reihe (6 × 1) | exakt |
-| 20 % und 40 % Überlappung | exakt |
+| 8 %, 10 %, 12 %, 20 % und 40 % Überlappung (mit ±15 px Jitter) | exakt |
+| unregelmäßige Aufnahmen ohne Raster (Reihen unterschiedlicher Länge, wandernde Zeilen, 10–45 % Überlappung) | exakt |
 | ein fehlendes Bild im Raster | übrige exakt, keine Fehlplatzierung |
 | ein nicht zuordenbares Bild (andere Karte) | wird **nicht** platziert, Meldung „Zwischen Screenshot N und den übrigen Bildern …“ |
 | fixe Browser-UI auf jedem Screenshot | Header wird erkannt und abgeschnitten, Layout exakt |
@@ -110,7 +111,7 @@ Da alle Bilder Ausschnitte **derselben flachen 2D-Karte bei identischem Zoom** s
 
 1. **Vorverarbeitung** – Dekodieren mit EXIF-Orientierung (`createImageBitmap(…, { imageOrientation: 'from-image' })`), Thumbnail, Graustufen-**Arbeitskopie** mit gemeinsamem Maßstab (lange Kante ≈ 1024 px, einstellbar 800–1400) und Pyramide (1024 → 512 → 256 → 128). Originale werden nie dauerhaft verkleinert; Export und Feinausrichtung nutzen die Originalpixel.
 2. **Crop & fixe UI** – Der Crop gilt für alle Screenshots. Die Auto-Erkennung sucht Pixel, die in ≥ 75 % der Screenshots (fast) identisch sind, obwohl sich die Karte bewegt, und maskiert texturierte statische Strukturen (Buttons, Texte, Legenden). Statische Leisten am Rand werden als Crop vorgeschlagen bzw. ohne manuellen Crop automatisch abgeschnitten. Maskierte Pixel zählen beim Matching nicht und haben beim Rendern minimales Gewicht.
-3. **Paarweises Grob-Matching (alle Paare, parallel)** – Für jedes Bild wird einmal das FFT-Spektrum der 128-px-Ebene berechnet (mittelwertfrei, Tukey-Fenster). Pro Paar liefert die **Phasenkorrelation** (normierte Kreuzleistung, zwei Paare pro inverser FFT) die sechs stärksten Translations-Peaks. Jeder Peak wird entfaltet (zyklische Mehrdeutigkeit → bis zu vier Kandidaten), per **maskierter ZNCC** auf der Überlappung bewertet, und die besten drei Hypothesen werden eine Ebene feiner verfeinert. So bleibt der O(n²)-Teil billig (≈ 1 ms pro Paar); teure Prüfungen gibt es nur für plausible Kandidaten. Wiederkehrende Muster erzeugen mehrere Peaks – deshalb wird nie nur ein einzelner Treffer verwendet, sondern der Abstand zur zweitbesten Hypothese als Mehrdeutigkeitsmaß gespeichert.
+3. **Paarweises Grob-Matching (alle Paare, parallel)** – Für jedes Bild wird einmal das FFT-Spektrum der 256-px-Ebene berechnet (auf 128 px wäre eine 10-%-Überlappung nur ~8 px hoch) (mittelwertfrei, schmales Tukey-Fenster mit 2 % Randabfall, damit auch schmale Überlappungen am Bildrand erhalten bleiben). Pro Paar liefert die **Phasenkorrelation** (normierte Kreuzleistung, zwei Paare pro inverser FFT) die sechs stärksten Translations-Peaks. Jeder Peak wird entfaltet (zyklische Mehrdeutigkeit → bis zu vier Kandidaten), per **maskierter ZNCC** auf der Überlappung bewertet, und die besten drei Hypothesen werden eine Ebene feiner verfeinert. So bleibt der O(n²)-Teil billig (≈ 4 ms pro Paar, parallel auf mehrere Worker verteilt); teure Prüfungen gibt es nur für plausible Kandidaten. Wiederkehrende Muster erzeugen mehrere Peaks – deshalb wird nie nur ein einzelner Treffer verwendet, sondern der Abstand zur zweitbesten Hypothese als Mehrdeutigkeitsmaß gespeichert.
 4. **Verfeinerung & Verifikation** – Coarse-to-fine-ZNCC-Suche bis zur Arbeitsauflösung mit Subpixel-Parabelfit. Zusätzlich **Harris-Keypoints mit Patch-Deskriptoren**: Deskriptor-Matching (Ratio-Test) im Überlappungsbereich, Translationsvektoren `dx_i = xA_i − xB_i`, Konsens-/Inlier-Prüfung gegen die Hypothese (RANSAC-artig für das 2-Parameter-Modell) → `numberOfMatches`, `inlierRatio`. Daraus und aus ZNCC, Überlappungsgröße, Textur und Eindeutigkeit entsteht die **Confidence** jeder Kante `{ imageA, imageB, dx, dy, confidence, numberOfMatches, inlierRatio }`.
 5. **Nachbarschafts-Graph & globales Layout** – Knoten = Screenshots, Kanten = verifizierte Überlappungen.
    - *Verifiziertes Greedy-Merging* (Kruskal-artig, absteigende Confidence): Eine Kante, die zwei Komponenten verbindet, wird nur akzeptiert, wenn alle **anderen** Bildpaare, die sich danach überlappen würden, die implizierte Verschiebung per ZNCC bestätigen. So werden Fehlzuordnungen durch repetitive Kartenmuster verworfen. Kanten innerhalb einer Komponente müssen zum bisherigen Layout passen (Schleifenprüfung).
@@ -147,7 +148,7 @@ Die App **misst die tatsächlichen Canvas-Limits** des Browsers und erzeugt nie 
 - **JPEG/WebP** benötigen eine Canvas in Endgröße. Ist sie zu groß, informiert der Export-Dialog und bietet **ZIP mit Kacheln** (2048/4096/8192 px) oder eine kleinere Auflösung an.
 - Der Export-Dialog zeigt vorab Pixelgröße, geschätzte Dateigröße und RAM-Bedarf.
 
-Speicherbedarf der Analyse: ca. 0,7 MB pro Screenshot (Arbeitskopie) plus temporär Graustufen-Originale für die Feinausrichtung (LRU-Cache, max. ca. 320 MB). 50–150 Screenshots sind auf Desktop-Rechnern gut machbar; 48 Screenshots werden im Test in ca. 4 s analysiert (single-threaded, im Browser zusätzlich parallelisiert).
+Speicherbedarf der Analyse: ca. 0,7 MB pro Screenshot (Arbeitskopie) plus temporär Graustufen-Originale für die Feinausrichtung (LRU-Cache, max. ca. 320 MB). 50–150 Screenshots sind auf Desktop-Rechnern gut machbar; 48 Screenshots werden im Test in ca. 7 s analysiert (single-threaded, im Browser zusätzlich parallelisiert).
 
 Benötigte Browser-Features: Module Worker (inkl. verschachtelter Worker), `OffscreenCanvas`, `createImageBitmap`, `CompressionStream` – vorhanden in aktuellen Versionen von Chrome, Edge, Firefox und Safari (≥ 16.4).
 
@@ -155,7 +156,7 @@ Benötigte Browser-Features: Module Worker (inkl. verschachtelter Worker), `Offs
 
 | Problem | Lösung |
 | --- | --- |
-| „Zwischen Screenshot N und den übrigen Bildern wurde keine ausreichende Überlappung gefunden.“ | Mindestens 25 % Überlappung aufnehmen. Prüfen, ob dieser Screenshot mit anderer Zoomstufe oder Fenstergröße entstanden ist. „Erneut versuchen“ oder „Manuell platzieren“ (mit „Einrasten“). |
+| „Zwischen Screenshot N und den übrigen Bildern wurde keine ausreichende Überlappung gefunden.“ | Empfohlen sind 25–40 % Überlappung; ab ca. 8–10 % funktioniert die Erkennung in der Regel, darunter wird es unzuverlässig. Prüfen, ob dieser Screenshot mit anderer Zoomstufe oder Fenstergröße entstanden ist. „Erneut versuchen“ oder „Manuell platzieren“ (mit „Einrasten“). |
 | Viele Bilder nicht zugeordnet | Crop prüfen: Ist der Kartenbereich korrekt? „Fixe UI automatisch erkennen“ nutzen. Große einfarbige Flächen (Meer, leere Gebiete) enthalten keine Information – dort mehr Überlappung wählen. |
 | Warnung „Abweichende Größe“ | Screenshots stammen aus unterschiedlichen Fenstergrößen oder Zoomstufen. Der Maßstab muss identisch sein. |
 | Ein Screenshot sitzt falsch | „Layout bearbeiten“ → Screenshot ungefähr an die richtige Stelle ziehen → „Einrasten“ richtet ihn pixelgenau aus. Im Debug-Modus sieht man Kanten, Confidence und verworfene Zuordnungen mit Begründung. |

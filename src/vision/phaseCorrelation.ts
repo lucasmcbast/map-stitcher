@@ -43,8 +43,8 @@ export function computeSpectrum(level: Level, fw?: number, fh?: number): Spectru
     n++;
   }
   const mean = n ? sum / n : 0;
-  const wx = tukey(w, 0.16);
-  const wy = tukey(h, 0.16);
+  const wx = tukey(w, 0.04);
+  const wy = tukey(h, 0.04);
   const re = new Float64Array(fw * fh);
   const im = new Float64Array(fw * fh);
   for (let y = 0; y < h; y++) {

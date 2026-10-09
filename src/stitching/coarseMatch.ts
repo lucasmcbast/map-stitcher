@@ -4,20 +4,24 @@ import { computeSpectrum, findPeaks, phaseCorrelate2, unwrapPeak, type Spectrum 
 import { nccAt, refineTranslation } from '../vision/zncc';
 
 /** Minimum overlap a translation hypothesis must produce to be considered at all. */
-export const MIN_OVERLAP = { area: 0.03, side: 0.06 };
+export const MIN_OVERLAP = { area: 0.015, side: 0.035 };
 
 export interface CoarseContext {
   images: MatchImage[];
   spectra: Spectrum[];
-  /** Pyramid level used for phase correlation (coarsest common level). */
+  /** Pyramid level used for phase correlation (see coarseLevelOf). */
   level: number;
 }
 
+/**
+ * Pyramid level used for phase correlation: the second coarsest (≈ 256 px long edge). The coarsest level
+ * (≈ 128 px) would be cheaper, but a 10 % overlap is only ~8 px tall there – too thin to be found.
+ */
 export function coarseLevelOf(images: MatchImage[]): number {
-  return Math.min(...images.map((m) => m.levels.length)) - 1;
+  return Math.max(0, Math.min(...images.map((m) => m.levels.length)) - 2);
 }
 
-/** Precomputes the Fourier spectra of all images at the coarsest common pyramid level. */
+/** Precomputes the Fourier spectra of all images at the phase-correlation level. */
 export function prepareCoarse(images: MatchImage[]): CoarseContext {
   const level = coarseLevelOf(images);
   const fw = nextPowerOfTwo(Math.max(...images.map((m) => m.levels[level].image.width)));

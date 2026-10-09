@@ -407,7 +407,7 @@ export function ResultView(props: {
               <strong>
                 {unmatched.length === 1 ? '1 Screenshot konnte' : `${unmatched.length} Screenshots konnten`} nicht sicher zugeordnet werden.
               </strong>
-              <span> Versuche mindestens 25 % Überlappung zwischen den Screenshots.</span>
+              <span> Empfohlen sind 25–40 % Überlappung zwischen den Screenshots (mindestens ca. 10 %).</span>
             </div>
             <button className="btn secondary small" onClick={retry} disabled={retrying}>
               <Icon name="refresh" /> {retrying ? 'Suche …' : 'Erneut versuchen'}

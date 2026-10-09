@@ -104,6 +104,37 @@ describe('translation-only stitching of synthetic map screenshots', () => {
     expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
   });
 
+  it.each([0.08, 0.1, 0.12])('works with only %s overlap (shuffled 4 × 5 grid)', async (overlap) => {
+    const s = await scenario({ rows: 4, cols: 5, ...TILE, overlap, jitter: 15, seed: 3 }, { seed: 17 });
+    expect(s.layout.placed.length).toBe(20);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+    expect(s.layout.grid?.rows).toBe(4);
+    expect(s.layout.grid?.cols).toBe(5);
+  });
+
+  it.each([1, 2, 3])('reconstructs irregular captures without a raster (seed %i)', async (seed) => {
+    // Rows of different length, random steps (10–45 % overlap), wandering rows, shuffled.
+    const rnd = mulberry32(seed);
+    const W = 1280;
+    const H = 800;
+    const pos: { x: number; y: number }[] = [];
+    let y = 20;
+    for (let r = 0; r < 4; r++) {
+      let x = 20 + Math.round(rnd() * 300);
+      const n = 3 + Math.floor(rnd() * 3);
+      for (let c = 0; c < n; c++) {
+        pos.push({ x, y: y + Math.round((rnd() - 0.5) * 120) });
+        x += Math.round(W * (0.55 + rnd() * 0.35));
+      }
+      y += Math.round(H * (0.55 + rnd() * 0.3));
+    }
+    const map = generateMap({ width: Math.max(...pos.map((p) => p.x)) + W + 100, height: Math.max(...pos.map((p) => p.y)) + H + 100, seed: 50 + seed });
+    const shuffled = shuffle(pos, seed);
+    const res = await stitchRasters(shuffled.map((p) => map.crop(p.x, p.y, W, H)));
+    expect(res.layout.placed.length).toBe(shuffled.length);
+    expect(layoutError(res.layout, shuffled, shuffled.map((_, i) => i))).toBeLessThanOrEqual(1);
+  });
+
   it('works with 40 % overlap', async () => {
     const s = await scenario({ rows: 3, cols: 4, ...TILE, overlap: 0.4, jitter: 8 }, { seed: 22 });
     expect(s.layout.placed.length).toBe(12);
