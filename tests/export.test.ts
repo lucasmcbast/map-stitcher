@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { composite } from '../src/export/compositor';
-import { crc32 } from '../src/export/crc32';
 import { PngStreamEncoder } from '../src/export/png';
 import { ZipWriter } from '../src/export/zip';
 import { solveLayout } from '../src/stitching/lsq';

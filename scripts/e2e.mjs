@@ -68,6 +68,14 @@ try {
   assert(true, '20 screenshots loaded with thumbnails');
   await page.screenshot({ path: join(OUT, '2-loaded.png') });
 
+  // Crop dialog with automatic fixed-UI detection.
+  await page.getByTestId('crop-open').click();
+  await page.getByTestId('detect-ui').click();
+  await page.getByText('Fixe Elemente erkannt').waitFor({ timeout: 60000 });
+  await page.screenshot({ path: join(OUT, '2b-crop.png') });
+  await page.getByTestId('crop-apply').click();
+  assert(await page.getByText(/Kartenbereich: \d+ × \d+ px/).isVisible(), 'detected crop applied to all screenshots');
+
   const t0 = Date.now();
   await page.getByTestId('stitch').click();
   await page.getByTestId('progress').waitFor({ timeout: 5000 });
@@ -92,6 +100,28 @@ try {
   await page.waitForTimeout(500);
   assert((await page.locator('.edge-table tbody tr').count()) >= 2, 'debug view lists neighbours of the selected screenshot');
   await page.screenshot({ path: join(OUT, '5-debug.png') });
+
+  // Layout editing: move the selected screenshot away, snapping must bring it back to its exact position.
+  const readPos = async () => {
+    const t = await page.locator('.debug-sel p.mono').innerText();
+    const m = t.replace(/\./g, '').match(/x = (-?\d+), y = (-?\d+)/);
+    return { x: +m[1], y: +m[2] };
+  };
+  const before = await readPos();
+  await page.getByRole('button', { name: 'Layout bearbeiten' }).click();
+  const cx = vb.x + vb.width / 2;
+  const cy = vb.y + vb.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 30, cy - 20, { steps: 6 });
+  await page.mouse.up();
+  await page.getByText(/an Nachbarn ausgerichtet|keine passende Überlappung/).waitFor({ timeout: 20000 });
+  await page.waitForTimeout(400);
+  const after = await readPos();
+  console.log(`  position before ${JSON.stringify(before)}, after drag + snap ${JSON.stringify(after)}`);
+  assert(before.x === after.x && before.y === after.y, 'snap to neighbour restores the exact position');
+  await page.screenshot({ path: join(OUT, '5b-edit.png') });
+  await page.getByRole('button', { name: 'Bearbeiten beenden' }).click();
 
   await page.getByTestId('export-open').click();
   await page.getByRole('button', { name: '25 %' }).click();

@@ -193,8 +193,8 @@ export class StitchEngine {
   }
 
   /** Precise measurement near an implied translation (original px), used for loop closure and snapping. */
-  measure(a: number, b: number, dx: number, dy: number, radius = 2): PairMatch | null {
-    const l = Math.min(1, this.images[a].levels.length - 1);
+  measure(a: number, b: number, dx: number, dy: number, radius = 2, level = 1): PairMatch | null {
+    const l = Math.min(level, this.images[a].levels.length - 1, this.images[b].levels.length - 1);
     const s = this.images[a].levels[l].scale;
     return refineCandidate(
       this.images[a],
@@ -353,7 +353,8 @@ export class StitchEngine {
       const dx = pos.x - q.x;
       const dy = pos.y - q.y;
       if (boxOverlap(this.boxes[other], this.boxes[id], dx, dy) < 0.03) return;
-      const m = this.measure(other, id, dx, dy, 6);
+      // Coarse-to-fine: search on the coarsest level (±8 px ≙ ±80 original px), then refine to level 0.
+      const m = this.measure(other, id, dx, dy, 8, this.images[id].levels.length - 1);
       if (!m || m.ncc < 0.7) return;
       results.push({ p: { x: q.x + m.dx, y: q.y + m.dy }, w: m.ncc * m.ncc * m.overlap });
     });

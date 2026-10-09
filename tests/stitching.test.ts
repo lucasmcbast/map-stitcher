@@ -153,3 +153,18 @@ describe('translation-only stitching of synthetic map screenshots', () => {
     console.log(`6×8 grid: ${s.ms.toFixed(0)} ms`);
   });
 });
+
+describe('manual correction', () => {
+  it('snaps a roughly placed screenshot back to its exact position', async () => {
+    const cut = { rows: 3, cols: 3, tileWidth: 1280, tileHeight: 800, overlap: 0.3, jitter: 8 };
+    const map = generateMap({ ...mapSizeFor(cut), seed: 81 });
+    const tiles = cutTiles(map, cut);
+    const { layout, engine } = await stitchRasters(tiles.map((t) => t.image));
+    const id = 4; // centre tile
+    const exact = layout.positions[id]!;
+    for (const [ox, oy] of [[90, -60], [-110, 35], [5, 7]]) {
+      const snapped = engine.snap(id, { x: exact.x + ox, y: exact.y + oy }, layout.positions.map((p, i) => (i === id ? null : p)));
+      expect(snapped).toEqual(exact);
+    }
+  });
+});
