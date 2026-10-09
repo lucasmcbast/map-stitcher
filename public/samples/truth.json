@@ -1,0 +1,156 @@
+{
+  "description": "Ground truth: top-left position of every screenshot in the source map",
+  "map": {
+    "width": 4894,
+    "height": 2510
+  },
+  "rows": 4,
+  "cols": 5,
+  "tileWidth": 1280,
+  "tileHeight": 800,
+  "overlap": 0.3,
+  "jitter": 14,
+  "seed": 2026,
+  "tiles": [
+    {
+      "file": "screenshot-01.png",
+      "x": 2696,
+      "y": 1128,
+      "row": 2,
+      "col": 3
+    },
+    {
+      "file": "screenshot-02.png",
+      "x": 904,
+      "y": 1706,
+      "row": 3,
+      "col": 1
+    },
+    {
+      "file": "screenshot-03.png",
+      "x": 1797,
+      "y": 569,
+      "row": 1,
+      "col": 2
+    },
+    {
+      "file": "screenshot-04.png",
+      "x": 907,
+      "y": 563,
+      "row": 1,
+      "col": 1
+    },
+    {
+      "file": "screenshot-05.png",
+      "x": 918,
+      "y": 1147,
+      "row": 2,
+      "col": 1
+    },
+    {
+      "file": "screenshot-06.png",
+      "x": 1796,
+      "y": 6,
+      "row": 0,
+      "col": 2
+    },
+    {
+      "file": "screenshot-07.png",
+      "x": 3592,
+      "y": 1,
+      "row": 0,
+      "col": 4
+    },
+    {
+      "file": "screenshot-08.png",
+      "x": 2707,
+      "y": 22,
+      "row": 0,
+      "col": 3
+    },
+    {
+      "file": "screenshot-09.png",
+      "x": 2,
+      "y": 577,
+      "row": 1,
+      "col": 0
+    },
+    {
+      "file": "screenshot-10.png",
+      "x": 3600,
+      "y": 560,
+      "row": 1,
+      "col": 4
+    },
+    {
+      "file": "screenshot-11.png",
+      "x": 19,
+      "y": 1704,
+      "row": 3,
+      "col": 0
+    },
+    {
+      "file": "screenshot-12.png",
+      "x": 2697,
+      "y": 1702,
+      "row": 3,
+      "col": 3
+    },
+    {
+      "file": "screenshot-13.png",
+      "x": 6,
+      "y": 1128,
+      "row": 2,
+      "col": 0
+    },
+    {
+      "file": "screenshot-14.png",
+      "x": 3596,
+      "y": 1128,
+      "row": 2,
+      "col": 4
+    },
+    {
+      "file": "screenshot-15.png",
+      "x": 1794,
+      "y": 1681,
+      "row": 3,
+      "col": 2
+    },
+    {
+      "file": "screenshot-16.png",
+      "x": 915,
+      "y": 17,
+      "row": 0,
+      "col": 1
+    },
+    {
+      "file": "screenshot-17.png",
+      "x": 3605,
+      "y": 1691,
+      "row": 3,
+      "col": 4
+    },
+    {
+      "file": "screenshot-18.png",
+      "x": 1818,
+      "y": 1141,
+      "row": 2,
+      "col": 2
+    },
+    {
+      "file": "screenshot-19.png",
+      "x": 13,
+      "y": 9,
+      "row": 0,
+      "col": 0
+    },
+    {
+      "file": "screenshot-20.png",
+      "x": 2699,
+      "y": 586,
+      "row": 1,
+      "col": 3
+    }
+  ]
+}

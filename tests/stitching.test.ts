@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addFixedUi, cutTiles, generateMap, mapSizeFor, mulberry32, shuffle, type CutOptions, type Raster } from './fixtures/syntheticMap';
 import { layoutError, stitchRasters } from './fixtures/harness';
+import { composite } from '../src/export/compositor';
 
 const TILE = { tileWidth: 1280, tileHeight: 800 };
 
@@ -46,7 +47,7 @@ async function scenario(
   const ms = performance.now() - t0;
   const truth = shuffled.map((t) => ({ x: t.x + (res.crop?.x ?? 0), y: t.y + (res.crop?.y ?? 0) }));
   const ids = shuffled.map((_, i) => i);
-  return { ...res, truth, ids, foreignIndex, ms, shuffled };
+  return { ...res, truth, ids, foreignIndex, ms, shuffled, map };
 }
 
 describe('translation-only stitching of synthetic map screenshots', () => {
@@ -62,6 +63,26 @@ describe('translation-only stitching of synthetic map screenshots', () => {
       expect(s.layout.grid!.cells[t.row][t.col]).toBe(i);
     }
     expect(s.layout.confidence).toBeGreaterThan(0.8);
+
+    // Render the mosaic in original resolution and compare it with the source map pixel by pixel.
+    const { bounds, positions } = s.layout;
+    const mosaic = composite(
+      bounds,
+      s.shuffled.map((t, i) => ({ x: positions[i]!.x, y: positions[i]!.y, image: t.image })),
+      'hard',
+    );
+    const ox = s.truth[0].x - positions[0]!.x;
+    const oy = s.truth[0].y - positions[0]!.y;
+    const ref = s.map.crop(ox, oy, bounds.width, bounds.height);
+    let covered = 0;
+    let identical = 0;
+    for (let i = 0; i < mosaic.data.length; i += 4) {
+      if (mosaic.data[i + 3] === 0) continue;
+      covered++;
+      if (mosaic.data[i] === ref.data[i] && mosaic.data[i + 1] === ref.data[i + 1] && mosaic.data[i + 2] === ref.data[i + 2]) identical++;
+    }
+    expect(covered).toBeGreaterThan(bounds.width * bounds.height * 0.95);
+    expect(identical / covered).toBe(1);
     console.log(`4×5 grid: ${s.ms.toFixed(0)} ms, confidence ${s.layout.confidence.toFixed(3)}`);
   });
 

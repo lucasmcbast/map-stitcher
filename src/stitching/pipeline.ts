@@ -316,7 +316,7 @@ export class StitchEngine {
 
   /**
    * Second attempt for unmatched screenshots with an independent method: hypothesis-free feature voting
-   * against every placed image plus grid-guided search in empty raster cells, with relaxed thresholds.
+   * (descriptor matching + translation clustering) against every placed image, with relaxed thresholds.
    */
   async retryUnmatched(): Promise<LayoutResult> {
     const layout = this.layout ?? (await this.solve());
