@@ -1,0 +1,32 @@
+{
+  "name": "map-stitcher",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Viele Screenshots. Eine Karte. Setzt überlappende Karten-Screenshots lokal im Browser zu einer großen Karte zusammen.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node scripts/e2e.mjs",
+    "generate:testdata": "vite-node scripts/generate-testdata.ts"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "playwright-core": "^1.52.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5",
+    "vite-node": "^3.2.0",
+    "vitest": "^3.2.0"
+  }
+}

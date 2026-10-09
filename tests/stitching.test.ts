@@ -1,0 +1,201 @@
+import { describe, expect, it } from 'vitest';
+import { addFixedUi, cutTiles, generateMap, mapSizeFor, mulberry32, shuffle, type CutOptions, type Raster } from './fixtures/syntheticMap';
+import { layoutError, stitchRasters } from './fixtures/harness';
+import { composite } from '../src/export/compositor';
+
+const TILE = { tileWidth: 1280, tileHeight: 800 };
+
+/** Independent per-pixel noise per screenshot (simulates lossy JPEG screenshots). */
+function addNoise(im: Raster, amp: number, seed: number) {
+  const rnd = mulberry32(seed);
+  for (let i = 0; i < im.data.length; i += 4) {
+    const n = (rnd() * 2 - 1) * amp;
+    im.data[i] += n;
+    im.data[i + 1] += n;
+    im.data[i + 2] += n;
+  }
+}
+
+async function scenario(
+  cut: CutOptions,
+  opts: { seed?: number; drop?: number[]; foreign?: boolean; ui?: boolean; noise?: number; workingSize?: number } = {},
+) {
+  const size = mapSizeFor(cut);
+  const map = generateMap({ ...size, seed: opts.seed ?? 7 });
+  let tiles = cutTiles(map, cut);
+  if (opts.drop) tiles = tiles.filter((_, i) => !opts.drop!.includes(i));
+  const order = shuffle(
+    tiles.map((_, i) => i),
+    opts.seed ?? 99,
+  );
+  const shuffled = order.map((i) => tiles[i]);
+  const images = shuffled.map((t) => t.image);
+  if (opts.ui) images.forEach((im) => addFixedUi(im));
+  if (opts.noise) images.forEach((im, k) => addNoise(im, opts.noise!, 1000 + k));
+  let foreignIndex = -1;
+  if (opts.foreign) {
+    const other = generateMap({ width: cut.tileWidth, height: cut.tileHeight, seed: 4242 });
+    if (opts.ui) addFixedUi(other);
+    foreignIndex = images.length;
+    images.push(other);
+  }
+  const t0 = performance.now();
+  const res = await stitchRasters(images, {
+    autoFixedUi: opts.ui,
+    settings: opts.workingSize ? { workingSize: opts.workingSize } : undefined,
+  });
+  const ms = performance.now() - t0;
+  const truth = shuffled.map((t) => ({ x: t.x + (res.crop?.x ?? 0), y: t.y + (res.crop?.y ?? 0) }));
+  const ids = shuffled.map((_, i) => i);
+  return { ...res, truth, ids, foreignIndex, ms, shuffled, map };
+}
+
+describe('translation-only stitching of synthetic map screenshots', () => {
+  it('reconstructs a shuffled 4 × 5 grid with 30 % overlap (main success criterion)', async () => {
+    const s = await scenario({ rows: 4, cols: 5, ...TILE, overlap: 0.3, jitter: 12, seed: 3 });
+    expect(s.layout.placed.length).toBe(20);
+    expect(s.layout.unmatched).toEqual([]);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+    expect(s.layout.grid?.rows).toBe(4);
+    expect(s.layout.grid?.cols).toBe(5);
+    // The grid must contain the tiles in their original row/column.
+    for (const [i, t] of s.shuffled.entries()) {
+      expect(s.layout.grid!.cells[t.row][t.col]).toBe(i);
+    }
+    expect(s.layout.confidence).toBeGreaterThan(0.8);
+
+    // Render the mosaic in original resolution and compare it with the source map pixel by pixel.
+    const { bounds, positions } = s.layout;
+    const mosaic = composite(
+      bounds,
+      s.shuffled.map((t, i) => ({ x: positions[i]!.x, y: positions[i]!.y, image: t.image })),
+      'hard',
+    );
+    const ox = s.truth[0].x - positions[0]!.x;
+    const oy = s.truth[0].y - positions[0]!.y;
+    const ref = s.map.crop(ox, oy, bounds.width, bounds.height);
+    let covered = 0;
+    let identical = 0;
+    for (let i = 0; i < mosaic.data.length; i += 4) {
+      if (mosaic.data[i + 3] === 0) continue;
+      covered++;
+      if (mosaic.data[i] === ref.data[i] && mosaic.data[i + 1] === ref.data[i + 1] && mosaic.data[i + 2] === ref.data[i + 2]) identical++;
+    }
+    expect(covered).toBeGreaterThan(bounds.width * bounds.height * 0.95);
+    expect(identical / covered).toBe(1);
+    console.log(`4×5 grid: ${s.ms.toFixed(0)} ms, confidence ${s.layout.confidence.toFixed(3)}`);
+  });
+
+  it('handles a single horizontal row', async () => {
+    const s = await scenario({ rows: 1, cols: 6, ...TILE, overlap: 0.3, jitter: 6 }, { seed: 11 });
+    expect(s.layout.placed.length).toBe(6);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it('handles a single vertical column', async () => {
+    const s = await scenario({ rows: 6, cols: 1, ...TILE, overlap: 0.3, jitter: 6 }, { seed: 12 });
+    expect(s.layout.placed.length).toBe(6);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it('works with only 20 % overlap', async () => {
+    const s = await scenario({ rows: 3, cols: 4, ...TILE, overlap: 0.2, jitter: 8 }, { seed: 21 });
+    expect(s.layout.placed.length).toBe(12);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it.each([0.08, 0.1, 0.12])('works with only %s overlap (shuffled 4 × 5 grid)', async (overlap) => {
+    const s = await scenario({ rows: 4, cols: 5, ...TILE, overlap, jitter: 15, seed: 3 }, { seed: 17 });
+    expect(s.layout.placed.length).toBe(20);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+    expect(s.layout.grid?.rows).toBe(4);
+    expect(s.layout.grid?.cols).toBe(5);
+  });
+
+  it.each([1, 2, 3])('reconstructs irregular captures without a raster (seed %i)', async (seed) => {
+    // Rows of different length, random steps (10–45 % overlap), wandering rows, shuffled.
+    const rnd = mulberry32(seed);
+    const W = 1280;
+    const H = 800;
+    const pos: { x: number; y: number }[] = [];
+    let y = 20;
+    for (let r = 0; r < 4; r++) {
+      let x = 20 + Math.round(rnd() * 300);
+      const n = 3 + Math.floor(rnd() * 3);
+      for (let c = 0; c < n; c++) {
+        pos.push({ x, y: y + Math.round((rnd() - 0.5) * 120) });
+        x += Math.round(W * (0.55 + rnd() * 0.35));
+      }
+      y += Math.round(H * (0.55 + rnd() * 0.3));
+    }
+    const map = generateMap({ width: Math.max(...pos.map((p) => p.x)) + W + 100, height: Math.max(...pos.map((p) => p.y)) + H + 100, seed: 50 + seed });
+    const shuffled = shuffle(pos, seed);
+    const res = await stitchRasters(shuffled.map((p) => map.crop(p.x, p.y, W, H)));
+    expect(res.layout.placed.length).toBe(shuffled.length);
+    expect(layoutError(res.layout, shuffled, shuffled.map((_, i) => i))).toBeLessThanOrEqual(1);
+  });
+
+  it('works with 40 % overlap', async () => {
+    const s = await scenario({ rows: 3, cols: 4, ...TILE, overlap: 0.4, jitter: 8 }, { seed: 22 });
+    expect(s.layout.placed.length).toBe(12);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it('tolerates a missing screenshot inside the grid', async () => {
+    const s = await scenario({ rows: 3, cols: 4, ...TILE, overlap: 0.3, jitter: 8 }, { seed: 31, drop: [5] });
+    expect(s.layout.placed.length).toBe(11);
+    expect(s.layout.unmatched).toEqual([]);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it('does not place a screenshot from a different map', async () => {
+    const s = await scenario({ rows: 3, cols: 3, ...TILE, overlap: 0.3, jitter: 8 }, { seed: 41, foreign: true });
+    expect(s.layout.unmatched).toEqual([s.foreignIndex]);
+    expect(s.layout.positions[s.foreignIndex]).toBeNull();
+    expect(s.layout.placed.length).toBe(9);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+    expect(s.layout.warnings[0]).toContain(`Screenshot ${s.foreignIndex + 1}`);
+  });
+
+  it('ignores fixed browser UI (auto detection + crop)', async () => {
+    const s = await scenario({ rows: 3, cols: 4, ...TILE, overlap: 0.3, jitter: 8 }, { seed: 51, ui: true });
+    expect(s.crop).not.toBeNull();
+    expect(s.crop!.y).toBeGreaterThanOrEqual(50);
+    expect(s.layout.placed.length).toBe(12);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it.each([101, 202, 303, 404])('reconstructs shuffled 4 × 5 grids for other maps (seed %i)', async (seed) => {
+    const s = await scenario({ rows: 4, cols: 5, ...TILE, overlap: 0.3, jitter: 15, seed }, { seed });
+    expect(s.layout.placed.length).toBe(20);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it('is robust against compression-like noise', async () => {
+    const s = await scenario({ rows: 3, cols: 4, ...TILE, overlap: 0.25, jitter: 8 }, { seed: 61, noise: 8 });
+    expect(s.layout.placed.length).toBe(12);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+  });
+
+  it('scales to larger sets (6 × 8 = 48 screenshots)', async () => {
+    const s = await scenario({ rows: 6, cols: 8, tileWidth: 960, tileHeight: 600, overlap: 0.3, jitter: 10 }, { seed: 71 });
+    expect(s.layout.placed.length).toBe(48);
+    expect(layoutError(s.layout, s.truth, s.ids)).toBeLessThanOrEqual(1);
+    console.log(`6×8 grid: ${s.ms.toFixed(0)} ms`);
+  });
+});
+
+describe('manual correction', () => {
+  it('snaps a roughly placed screenshot back to its exact position', async () => {
+    const cut = { rows: 3, cols: 3, tileWidth: 1280, tileHeight: 800, overlap: 0.3, jitter: 8 };
+    const map = generateMap({ ...mapSizeFor(cut), seed: 81 });
+    const tiles = cutTiles(map, cut);
+    const { layout, engine } = await stitchRasters(tiles.map((t) => t.image));
+    const id = 4; // centre tile
+    const exact = layout.positions[id]!;
+    for (const [ox, oy] of [[90, -60], [-110, 35], [5, 7]]) {
+      const snapped = engine.snap(id, { x: exact.x + ox, y: exact.y + oy }, layout.positions.map((p, i) => (i === id ? null : p)));
+      expect(snapped).toEqual(exact);
+    }
+  });
+});
